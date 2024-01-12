@@ -7,9 +7,7 @@ from torch.optim import Rprop, Optimizer
 from torch.nn import functional as F
 from torch.func import grad, vmap, functional_call, stack_module_state
 from copy import deepcopy
-from sklearn.decomposition import PCA
-from dataclasses import dataclass, replace
-from fast_tsp import find_tour
+from dataclasses import dataclass
 
 
 _DEFAULT_NUMPY_TYPE = np.float32
@@ -74,11 +72,11 @@ class Ensemble(nn.Module):
         return -(th.nan_to_num(p * th.log(p)) + th.nan_to_num((1 - p) * th.log(1 - p)))
 
 
-def wrapper(model: Ensemble, device, otype: str):
+def wrapper(model: Ensemble, dtype, device, otype: str):
     def wrapping(X: np.ndarray):
         X = np.atleast_2d(X)
         with th.no_grad():
-            X = th.from_numpy(X).to(dtype=_DEFAULT_TORCH_TYPE, device=device)
+            X = th.from_numpy(X).to(dtype=dtype, device=device)
             if otype == 'probability':
                 return model.predict_proba(X=X).cpu().numpy()
             if otype == 'entropy':
@@ -141,11 +139,10 @@ def probe_aabb(X: th.Tensor, num_samples: int):
     return X_min + aabb_size * th.rand(num_samples, X_min.size(0), device=X.device, dtype=X.dtype)
 
 
-
-
 def nbis(X0: np.ndarray, 
          func: Callable, 
          device='cpu', 
+         dtype=_DEFAULT_TORCH_TYPE,
          epochs: int = 1, 
          outer_steps: int = 50, 
          inner_steps: int = 1, 
@@ -160,27 +157,27 @@ def nbis(X0: np.ndarray,
          noise: float | None = 0.06,
          optimizer_class: Optimizer = Rprop,
          **kwargs):
-    X = X0
     if bounded:
-        X_min, X_max = nbis_bounds(X=X0, dtype=_DEFAULT_TORCH_TYPE, device=device)
-    X_frozen = X_dynamic = th.from_numpy(X).to(dtype=_DEFAULT_TORCH_TYPE, device=device)
-    Y_frozen = Y_dynamic = th.from_numpy(func(X)).to(dtype=_DEFAULT_TORCH_TYPE, device=device)
+        X_min, X_max = nbis_bounds(X=X0, dtype=dtype, device=device)
+    X_frozen = X_dynamic = th.from_numpy(X0).to(dtype=dtype, device=device)
+    Y_frozen = Y_dynamic = th.from_numpy(func(X0)).to(dtype=dtype, device=device)
     model = Ensemble(model_class=MLP, 
                      num_models=ensemble, 
-                     in_dims=X.shape[1], 
+                     in_dims=X_frozen.shape[1], 
                      out_dims=Y_frozen.shape[1], 
-                     width=factor * X.shape[1] + factor, 
+                     width=factor * X_frozen.shape[1] + factor, 
                      depth=depth, 
                      device=device, 
-                     dtype=_DEFAULT_TORCH_TYPE)
-    sample_size = X0.shape[0] if sample_size is None else sample_size
+                     dtype=dtype)
+    sample_size = X_frozen.shape[0] if sample_size is None else sample_size
     opt = optimizer_class(params=model.parameters(), **kwargs)
     for _ in range(outer_steps):
         X_prev = X_dynamic
         sampled = None
         if sample_aabb:
             sampled_X = probe_aabb(X=X_dynamic, num_samples=sample_size)
-            sampled = (sampled_X, th.from_numpy(func(sampled_X.detach().cpu().numpy())).to(dtype=Y_dynamic.dtype, device=device))
+            sampled_Y = th.from_numpy(func(sampled_X.detach().cpu().numpy()))
+            sampled = (sampled_X, sampled_Y).to(dtype=dtype, device=device))
         X_dynamic = nbis_step(dynamic=(X_dynamic, Y_dynamic),
                               optimizer=opt, 
                               model=model, 
@@ -193,62 +190,12 @@ def nbis(X0: np.ndarray,
             if noise is not None:
                 X_dynamic = X_dynamic + th.randn_like(X_dynamic) * noise
             if bounded:
-                X_dynamic = th.where(condition=th.bitwise_and(input=(X_min < X_dynamic), other=(X_dynamic < X_max)), 
-                                    input=X_dynamic, 
-                                    other=X_prev)
+                inside = th.bitwise_and(input=(X_min < X_dynamic), other=(X_dynamic < X_max))
+                X_dynamic = th.where(condition=inside, input=X_dynamic, other=X_prev)
         X_output = X_dynamic.detach().cpu().numpy()
         yield NBISResult(X=X_output, 
-                         predict_proba=wrapper(model=model, device=device, otype='probability'), 
-                         predict_entropy=wrapper(model=model, device=device, otype='entropy'), 
+                         predict_proba=wrapper(model=model, dtype=dtype, device=device, otype='probability'), 
+                         predict_entropy=wrapper(model=model, dtype=dtype, device=device, otype='entropy'), 
                          model=model,
                          device=device)
-        Y_dynamic = th.from_numpy(func(X_output)).to(dtype=Y_frozen.dtype, device=device)
-    
-
-def sample_line(a: th.Tensor, b: th.Tensor, n: int):
-    steps = th.linspace(0, 1, n).unsqueeze(1)
-    return a + steps * (b - a)
-
-
-def find_cycle(X: th.Tensor,
-               distance_func: Callable,
-               entropy_func: Callable,
-               seconds: float):
-    distances = vmap(lambda a: vmap(lambda b: distance_func(a, b))(X))(X)
-    entropies = vmap(lambda a: vmap(lambda b: entropy_func(a, b))(X))(X)
-    costs = ((distances / entropies).cpu().numpy() * 100.).astype(int)
-    return th.from_numpy(np.array(find_tour(dists=costs, duration_seconds=seconds))).to(device=X.device)
-
-
-def make_contourf(X: th.Tensor, distance_func: Callable):
-    X = th.concat([X, X[0].reshape(1, -1)], dim=0)
-    windows = X.unfold(dimension=0, size=2, step=1)
-    arr, brr = windows[:, 0], windows[:, 1]
-    leaps = vmap(lambda a, b: distance_func(a, b))(arr, brr)
-    domain = th.concat([th.zeros((1,), dtype=leaps.dtype, device=leaps.device), th.cumsum(input=leaps, dim=0)], dim=0)
-    @th.no_grad()
-    def _contourf(input: th.Tensor):
-        xi, i = domain.masked_fill(mask=(input < domain), value=-th.inf).max(dim=0)
-        xj, j = domain.masked_fill(mask=(domain <= input), value=th.inf).min(dim=0)
-        yi = X.index_select(dim=0, index=i)[0]
-        yj = X.index_select(dim=0, index=j)[0]
-        w = (input - xi) / (xj - xi)
-        return yi + w * (yj - yi)
-    def contourf(inputs: np.ndarray):
-        inputs = th.from_numpy(inputs).to(dtype=domain.dtype, device=domain.device)
-        outputs = vmap(_contourf)(inputs)
-        return outputs.cpu().numpy()
-    return contourf, domain.min().item(), domain.max().item()
-
-
-@th.no_grad()
-def refine(nbis_res: NBISResult, db_size: int | None = None, sample_res: int = 100, maxsecs: float = 60.):
-    db_size = nbis_res.X.shape[0] if db_size is None else db_size
-    X = th.from_numpy(nbis_res.X).to(device=nbis_res.device)
-    distance_func = lambda a, b: th.sqrt(th.sum((a - b) ** 2))
-    entropy_func = lambda a, b: nbis_res.model.predict_entropy(X=sample_line(a=a, b=b, n=sample_res)).mean()
-    indices = find_cycle(X=X, distance_func=distance_func, entropy_func=entropy_func, seconds=maxsecs)
-    contourf, start, end = make_contourf(X=X[indices], distance_func=distance_func)
-    ref_X = contourf(np.linspace(start=start, stop=end, num=db_size))
-    return replace(deepcopy(nbis_res), contourf=contourf, crange=(start, end), X=ref_X)
-    
+        Y_dynamic = th.from_numpy(func(X_output)).to(dtype=dtype, device=device)
