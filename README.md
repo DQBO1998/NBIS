@@ -6,7 +6,7 @@ From this near-boundary instance set (NBIS), we can derive a closed interval for
 
 ---
 
-I compare my approach to generating explanations against [anchors](https://github.com/marcotcr/anchor/tree/master) in terms of coverage and precision. The main difference between them is that my approach does not require quantization as pre-processing.
+I compare my approach to generating explanations against [anchors](https://github.com/marcotcr/anchor/tree/master) in terms of coverage and precision. The main difference between them is that my approach does not require quantization as pre-processing. To show this, all experiments were run with quantization disabled.
 
 ---
 
