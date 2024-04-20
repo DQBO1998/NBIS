@@ -56,8 +56,6 @@ executing==0.8.3
 fast-tsp==0.1.2
 fastjsonschema==2.16.2
 filelock==3.9.0
-Flask==2.2.2
-Flask-Cors==3.0.10
 fonttools==4.25.0
 frozenlist==1.4.0
 fsspec==2023.6.0
@@ -65,13 +63,10 @@ gitdb==4.0.7
 GitPython==3.1.37
 greenlet==2.0.1
 hdbscan==0.8.33
-huggingface-hub==0.17.3
 hypertools==0.8.0
 idna==3.4
 imagecodecs==2023.1.23
 imageio==2.31.1
-importlib-metadata==6.8.0
-importlib-resources==6.1.1
 ipykernel==6.19.2
 ipython==8.12.0
 ipython-genutils==0.2.0
