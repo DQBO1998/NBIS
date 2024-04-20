@@ -42,7 +42,7 @@ contourpy==1.0.5
 cryptography==39.0.1
 cycler==0.11.0
 cymem==2.0.7
-Cython==3.0.2
+Cython
 cytoolz==0.12.3
 dask==2024.2.0
 datasets==2.14.5
