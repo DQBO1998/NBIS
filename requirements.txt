@@ -16,7 +16,6 @@ autoray==0.6.6
 Babel==2.11.0
 backcall==0.2.0
 beautifulsoup4==4.12.2
-bertopic==0.15.0
 bleach==4.1.0
 blinker==1.6.2
 blis==0.7.10
