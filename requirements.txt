@@ -129,8 +129,8 @@ networkx==2.8.4
 nltk==3.8.1
 notebook==6.5.2
 notebook_shim==0.2.2
-numba==0.56.4
-numpy==1.23.5
+numba
+numpy
 optuna==3.2.0
 pandas==1.5.3
 scikit-image==0.20.0
