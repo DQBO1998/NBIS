@@ -50,7 +50,6 @@ debugpy==1.5.1
 decorator==5.1.1
 defusedxml==0.7.1
 dill==0.3.7
-en-core-web-trf==3.6.1
 entrypoints==0.4
 etils==1.6.0
 executing==0.8.3
