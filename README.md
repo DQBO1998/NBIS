@@ -2,11 +2,11 @@ This project started as part of my bachelor thesis. I continue working on it occ
 
 The goal is to develop an algorithm for sampling the decision boundary of a black-box classifier, whilst keeping a balance between fidelity and speed.
 
-From this near-boundary instance set (NBIS), we can derive a closed interval for each input feature such that perturbations within those intervals do not elicit any change on the class predicted by the classifier.
-
 ---
 
-I compare my approach to generating explanations against [anchors](https://github.com/marcotcr/anchor/tree/master) in terms of coverage and precision. The main difference between them is that my approach does not require quantization as pre-processing. To show this, all experiments were run with quantization disabled.
+From any near-boundary instance set (NBIS), we can derive a closed interval for each input feature such that perturbations within those intervals do not elicit any change on the class predicted by the classifier.
+
+This method is compared against [anchors](https://github.com/marcotcr/anchor/tree/master) in terms of coverage and precision. The main difference between them is that my approach does not require quantization as pre-processing. To show this, all experiments were run with quantization disabled. Visualizations of the outcomes are available in `visualizations.ipynb`.
 
 ---
 
