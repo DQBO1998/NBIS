@@ -28,3 +28,4 @@ tqdm==4.65.0
 pathos
 anchor-exp
 lime
+colorama
