@@ -25,3 +25,4 @@ torchquad==0.4.0
 torchvision==0.15.2
 tornado==6.2
 tqdm==4.65.0
+pathos
